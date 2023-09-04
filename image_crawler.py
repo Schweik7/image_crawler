@@ -1,16 +1,16 @@
-from datetime import datetime
-from DrissionPage import WebPage
-from DrissionPage.chromium_element import ChromiumElement
-from DrissionPage.session_element import SessionElement
-from DrissionPage.easy_set import configs_to_here, set_paths
-from DrissionPage.errors import ElementNotFoundError
-from DataRecorder import Recorder, DBRecorder
-from DrissionPage.commons.web import format_html
-from loguru import logger
-from dataclasses import dataclass, asdict
+import os
 import sys
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from time import sleep
 from typing import Literal
+
+from DataRecorder import DBRecorder, Recorder
+from DrissionPage import WebPage
+from DrissionPage.chromium_element import ChromiumElement
+from DrissionPage.easy_set import configs_to_here, set_paths
+from DrissionPage.errors import ElementNotFoundError
+from loguru import logger
 
 # Flickr
 # Unsplash
@@ -30,6 +30,14 @@ pixabay_img = "https://cdn.pixabay.com/photo/2017/08/07/18/57/dog-2606759__340.j
 proxies = {
     "http": "http://127.0.0.1:10809",
     "https": "http://127.0.0.1:10809",
+}
+
+fake_headers = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",  # noqa
+    "Accept-Charset": "UTF-8,*;q=0.5",
+    "Accept-Encoding": "gzip,deflate,sdch",
+    "Accept-Language": "en-US,en;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.74 Safari/537.36 Edg/79.0.309.43",  # noqa
 }
 
 
@@ -64,15 +72,17 @@ class Image_crawler:
             configs_to_here()
             set_paths(user_data_path="./user_data")
         self.page = WebPage()
-        # if recoder == "csv":
-        #     self.recorder = Recorder("imager_src_info.csv", cache_size=10)
-        #     self.recorder._encoding = "utf-8-sig"
-        # else:
-        #     self.recorder = DBRecorder(
-        #         "images.db", cache_size=10, table="images_src_info"
-        #     )  # noqa: E501
+        if recoder == "csv":
+            self.recorder = Recorder("imager_src_info.csv", cache_size=10)
+            self.recorder._encoding = "utf-8-sig"
+        else:
+            self.recorder = DBRecorder(
+                "images.db", cache_size=10, table="images_src_info"
+            )  # noqa: E501
         self.website = website
         self.to_jpg = to_jpg
+        if to_jpg:
+            logger.info("[+] 将会将avif格式的图片转换为jpg格式")
 
     def mkdir(self, keyword):
         self.keyword = keyword
@@ -82,24 +92,17 @@ class Image_crawler:
 
     def unsplash_crawl(self, keywords: str = "cat", image_cnt: int = 200) -> bool:
         self.cur_image_cnt = 0
-        # self.page.get(unsplash_url.format(keywords))
+        self.page.get(unsplash_url.format(keywords))
         # self.page.download_set.by_browser()
-        self.page.download_set.by_DownloadKit()
-
-        fileurl="https://images.unsplash.com/photo-1519810755548-39cd217da494?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NDV8fE5pZ2h0JTIwc2t5fGVufDB8fDB8fHww&w=1000&q=80"
-        self.page.download(
-            file_url=fileurl,
-            file_exists="overwrite",
-            show_msg=True,
-        )
-        self.page.download.get_failed_missions()
-        return
+        self.page.download_set.by_DownloadKit()  # 是通过requests进行下载的
         logger.info(f"[+] 开始搜索以{keywords}为关键词的图片")
         if button := self.page("Load more", timeout=5):
-            button.click(by_js=True)  # 先按load more
+            button.click(by_js=True, timeout=2.5)  # 先按load more
             sleep(2.5)
             self.page.scroll.to_top()
             logger.info("[√] 点击了load more按钮")
+        else:
+            logger.warning("[!] Load more按钮")
         while self.cur_image_cnt < image_cnt:
             self.page.scroll.down(800)
             sleep(0.15)
@@ -132,8 +135,7 @@ class Image_crawler:
                     image.link = fig_ele("css:a[itemprop=contentUrl]").link
                     # save方法中Path(path).mkdir(parents=True, exist_ok=True)
                     if not img_ele.prop("currentSrc"):
-                        # p=img_ele.page.run_cdp("Runtime.getProperties", objectId=img_ele._obj_id)["result"]
-                        # logger.warning(f"[x] title:{image.title} can't find src.{p=}")
+                        logger.info(f"[x] 标题为{image.title}的图片将单独下载")
                         # self.page.download.add(file_url=img_ele.attr("src"),goal_path=path,rename=rename) # 多线程的下载西似乎有些问题
                         self.page.download(
                             file_url=img_ele.attr("src"),
@@ -141,6 +143,8 @@ class Image_crawler:
                             rename=rename,
                             file_exists="overwrite",
                             show_msg=True,
+                            headers=fake_headers,
+                            proxies=proxies,
                         )
                     else:
                         # save函数主要是通过currentSrc存储的
@@ -151,23 +155,7 @@ class Image_crawler:
                 self.recorder.record()
 
 
-# def prop(self, prop): # 尝试调试CDP。不过太复杂了，懒得动了
-#     p = self.page.run_cdp("Runtime.getProperties", objectId=self._obj_id)["result"]
-#     for i in p:
-#         if i["name"] == prop:
-#             if "value" not in i or "value" not in i["value"]:
-#                 logger.info(f"[x] {self._obj_id} can't find prop {prop}")
-#                 logger.info(f"[x] {p=}")
-#                 return None
-#             value = i["value"]["value"]
-#             return format_html(value) if isinstance(value, str) else value
-
-
-# ChromiumElement.prop = prop
-
 if __name__ == "__main__":
-    import os
-
     os.chdir(os.path.dirname(__file__))
 
     crawler = Image_crawler()

@@ -96,13 +96,13 @@ class Image_crawler:
         # self.page.download_set.by_browser()
         self.page.download_set.by_DownloadKit()  # 是通过requests进行下载的
         logger.info(f"[+] 开始搜索以{keywords}为关键词的图片")
-        if button := self.page("Load more", timeout=5):
+        if button := self.page("Load more", timeout=3):
             button.click(by_js=True, timeout=2.5)  # 先按load more
             sleep(2.5)
             self.page.scroll.to_top()
             logger.info("[√] 点击了load more按钮")
         else:
-            logger.warning("[!] Load more按钮")
+            logger.warning("[!] Load more按钮没有点击，请自己手动点击一下！")
         while self.cur_image_cnt < image_cnt:
             self.page.scroll.down(800)
             sleep(0.15)

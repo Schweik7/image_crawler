@@ -4,14 +4,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from time import sleep
 from typing import Literal
-
+import json
 from DataRecorder import DBRecorder, Recorder
 from DrissionPage import WebPage
 from DrissionPage.chromium_element import ChromiumElement
 from DrissionPage.easy_set import configs_to_here, set_paths
 from DrissionPage.errors import ElementNotFoundError
 from loguru import logger
-
+import openpyxl
 # Flickr
 # Pexels
 # Pinterest
@@ -170,11 +170,52 @@ class Image_crawler:
         def pixabay_image_extract(self, keywords, fig_ele):
             image=Image()
             image.key_words=keywords
-            image.
+            pass
+def read_first_column(filename):
+    workbook = openpyxl.load_workbook(filename)
+    sheet = workbook.active
+    column_data = [cell.value for cell in sheet['A'] if cell.value is not None]
+    return column_data
 
+PROGRESS_FILE = "progress_cache.json"
+
+def save_progress(data):
+    with open(PROGRESS_FILE, 'w') as f:
+        json.dump(data, f)
+
+def load_progress():
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def cache_progress(func):
+    def wrapper(*args, **kwargs):
+        data = load_progress()
+        list_to_process = args[0]
+        starting_index = data.get('last_completed', -1) + 1
+        for i in range(starting_index, len(list_to_process)):
+            try:
+                func(list_to_process[i], **kwargs)
+                data['last_completed'] = i
+                save_progress(data)
+            except Exception as e:
+                print(f"Failed on index {i} due to {e}")
+                break
+
+    return wrapper
+
+
+crawler = Image_crawler()
+@cache_progress # 将记录下当前列表中成功的参数；每次启动时读取成功参数
+def unsplash_crawl_list(element):
+    crawler.unsplash_crawl(keywords=element, image_cnt=1000)
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(__file__))
+    keywords_list=read_first_column('复愈性环境0917.xlsx')
+    unsplash_crawl_list(keywords_list)
 
-    crawler = Image_crawler()
-    crawler.unsplash_crawl(keywords="Night sky", image_cnt=40)
+
+
+

@@ -96,7 +96,11 @@ class Image_crawler:
         else:
             logger.warning("[!] Load more按钮没有点击，请自己手动点击一下！")
         last_processed_index=-1
-        while self.cur_image_cnt < image_cnt:
+        fail_cnt=0
+        # 在获取了千张左右的图片后，会一直"Make something awesome"并且不刷图片
+        # 我们将图片长度不更新的行为定义为fail
+        while self.cur_image_cnt < image_cnt and fail_cnt<10: 
+            #  and "Make something awesome" not in self.page.html
             self.page.scroll.down(800)
             sleep(0.15)
             self.page.scroll.up(200)
@@ -104,6 +108,9 @@ class Image_crawler:
             # figure[itemprop=image] 可获取所有的包括tag的图片信息元素组
             # img[data-test=photo-grid-masonry-img]可获取图片元素
             image_eles=self.page.eles("css:figure[itemprop=image]")
+            if len(image_eles)==last_processed_index+1:
+                fail_cnt+=1
+                continue
             for fig_ele in image_eles[last_processed_index:]: # 这里应该
                 self.unsplash_image_extract(keywords, fig_ele)
             last_processed_index=len(image_eles)-1
@@ -210,15 +217,25 @@ def cache_progress(func):
     return wrapper
 
 
-crawler = Image_crawler()
-@cache_progress # 将记录下当前列表中成功的参数；每次启动时读取成功参数
-def unsplash_crawl_list(element):
-    crawler.unsplash_crawl(keywords=element, image_cnt=1000)
+# crawler = Image_crawler()
+# @cache_progress # 将记录下当前列表中成功的参数；每次启动时读取成功参数
+# def unsplash_crawl_list(element):
+#     crawler.unsplash_crawl(keywords=element, image_cnt=1000)
 
 if __name__ == "__main__":
     os.chdir(os.path.dirname(__file__))
-    keywords_list=read_first_column('复愈性环境0917.xlsx')
-    unsplash_crawl_list(keywords_list)
+    from playwright.sync_api import sync_playwright
+    u = 'https://www.baidu.com/'
+    sy = sync_playwright()
+    qd = sy.start()
+    browser = qd.chromium.connect_over_cdp(endpoint_url="http://localhost:9222")
+    default_context = browser.contexts[0]
+    page = default_context.pages[0]
+    page.goto(u)
+    # qd.stop()
+    # keywords_list=read_first_column('复愈性环境0917.xlsx')
+    # unsplash_crawl_list(keywords_list)
+
 
 
 

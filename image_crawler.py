@@ -95,6 +95,7 @@ class Image_crawler:
             logger.info("[√] 点击了load more按钮")
         else:
             logger.warning("[!] Load more按钮没有点击，请自己手动点击一下！")
+        last_processed_index=-1
         while self.cur_image_cnt < image_cnt:
             self.page.scroll.down(800)
             sleep(0.15)
@@ -102,10 +103,11 @@ class Image_crawler:
             sleep(0.15)
             # figure[itemprop=image] 可获取所有的包括tag的图片信息元素组
             # img[data-test=photo-grid-masonry-img]可获取图片元素
-            if len(self.page.s_eles("css:figure[itemprop=image]")) > image_cnt:
-                for fig_ele in self.page.eles("css:figure[itemprop=image]"):
-                    self.unsplash_image_extract(keywords, fig_ele)
-                self.recorder.record()
+            image_eles=self.page.eles("css:figure[itemprop=image]")
+            for fig_ele in image_eles[last_processed_index:]: # 这里应该
+                self.unsplash_image_extract(keywords, fig_ele)
+            last_processed_index=len(image_eles)-1
+            self.recorder.record()
         return True
 
     def page_init(self, keywords,website="unsplash"):
@@ -140,15 +142,16 @@ class Image_crawler:
                     # save方法中Path(path).mkdir(parents=True, exist_ok=True)
         if not img_ele.prop("currentSrc"):
             logger.info(f"[x] 标题为{image.title}的图片将单独下载")
-                        # self.page.download.add(file_url=img_ele.attr("src"),goal_path=path,rename=rename) # 多线程的下载西似乎有些问题
-            self.page.download(
-                            file_url=img_ele.attr("src"),
-                            goal_path=path,
-                            rename=rename,
-                            file_exists="overwrite",
-                            headers=fake_headers,
-                            proxies=proxies,
-                        )
+            self.page.download.add(file_url=img_ele.attr("src"),goal_path=path,
+                                   rename=rename,headers=fake_headers,proxies=proxies) 
+            # self.page.download(
+            #                 file_url=img_ele.attr("src"),
+            #                 goal_path=path,
+            #                 rename=rename,
+            #                 file_exists="overwrite",
+            #                 headers=fake_headers,
+            #                 proxies=proxies,
+            #             )
         else:
                         # save函数主要是通过currentSrc存储的
             img_ele.save(path=path, rename=rename)
@@ -171,6 +174,7 @@ class Image_crawler:
             image=Image()
             image.key_words=keywords
             pass
+
 def read_first_column(filename):
     workbook = openpyxl.load_workbook(filename)
     sheet = workbook.active

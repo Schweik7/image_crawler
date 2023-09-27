@@ -12,15 +12,17 @@ from DrissionPage.easy_set import configs_to_here, set_paths
 from DrissionPage.errors import ElementNotFoundError
 from loguru import logger
 import openpyxl
+
+
 # Flickr
 # Pexels
 # Pinterest
 pexels_url = "https://www.pexels.com/search/{}"
 pexels_url_2 = "https://www.pexels.com/zh-cn/search/{}"
 
-website_urls={
-    "unsplash":"https://unsplash.com/s/photos/{}",
-    "pixabay" : "https://pixabay.com/images/search/{}"
+website_urls = {
+    "unsplash": "https://unsplash.com/s/photos/{}",
+    "pixabay": "https://pixabay.com/images/search/{}",
 }
 
 proxies = {
@@ -86,8 +88,8 @@ class Image_crawler:
         if not os.path.exists(picpath):
             os.makedirs(picpath)
 
-    def unsplash_crawl(self, keywords: str = "cat", image_cnt: int = 200) -> bool:
-        self.page_init(keywords,website="unsplash")
+    def unsplash_crawl(self, keywords: str = "cat", image_cnt: int = 1000) -> bool:
+        self.page_init(keywords, website="unsplash")
         if button := self.page("Load more", timeout=3):
             button.click(by_js=True, timeout=2.5)  # 先按load more
             sleep(2.5)
@@ -108,9 +110,9 @@ class Image_crawler:
                 self.recorder.record()
         return True
 
-    def page_init(self, keywords,website="unsplash"):
+    def page_init(self, keywords, website="unsplash"):
         self.cur_image_cnt = 0
-        self.page.get(website_urls[website].format(keywords)) # 不同网站用不用的搜索网址
+        self.page.get(website_urls[website].format(keywords))  # 不同网站用不用的搜索网址
         # self.page.download_set.by_browser()
         self.page.download_set.by_DownloadKit()  # 是通过requests进行下载的
         logger.info(f"[+] 开始搜索以{keywords}为关键词的图片")
@@ -119,85 +121,89 @@ class Image_crawler:
         image = Image()
         image.key_words = keywords
         img_ele: ChromiumElement = fig_ele.ele(
-                        "css:img[data-test=photo-grid-masonry-img]"
-                    )
+            "css:img[data-test=photo-grid-masonry-img]"
+        )
         image.title = img_ele.attr("alt")
-        image.tag = (
-                        fig_ele.child().child(index=2).raw_text.replace("\n", ";")
-                    )
+        image.tag = fig_ele.child().child(index=2).raw_text.replace("\n", ";")
         filename = (
-                        f"images/{keywords}/{keywords}_{self.cur_image_cnt}_"
-                        f'{datetime.now().strftime("%Y%m%d-%H%M")}'
-                    )
+            f"images/{keywords}/{keywords}_{self.cur_image_cnt}_"
+            f'{datetime.now().strftime("%Y%m%d-%H%M")}'
+        )
         if not self.to_jpg:
             image.location = filename + ".avif"
         else:
             image.location = filename + ".jpg"
         path = os.path.dirname(image.location)
         rename = os.path.basename(image.location)
-                    # image.link=img_ele.prop("currentSrc")#会返回一个plus.unsplash.com
+        # image.link=img_ele.prop("currentSrc")#会返回一个plus.unsplash.com
         image.link = fig_ele("css:a[itemprop=contentUrl]").link
-                    # save方法中Path(path).mkdir(parents=True, exist_ok=True)
+        # save方法中Path(path).mkdir(parents=True, exist_ok=True)
         if not img_ele.prop("currentSrc"):
             logger.info(f"[x] 标题为{image.title}的图片将单独下载")
-                        # self.page.download.add(file_url=img_ele.attr("src"),goal_path=path,rename=rename) # 多线程的下载西似乎有些问题
+            # self.page.download.add(file_url=img_ele.attr("src"),goal_path=path,rename=rename) # 多线程的下载西似乎有些问题
             self.page.download(
-                            file_url=img_ele.attr("src"),
-                            goal_path=path,
-                            rename=rename,
-                            file_exists="overwrite",
-                            headers=fake_headers,
-                            proxies=proxies,
-                        )
+                file_url=img_ele.attr("src"),
+                goal_path=path,
+                rename=rename,
+                file_exists="overwrite",
+                headers=fake_headers,
+                proxies=proxies,
+            )
         else:
-                        # save函数主要是通过currentSrc存储的
+            # save函数主要是通过currentSrc存储的
             img_ele.save(path=path, rename=rename)
         logger.debug(image)
         self.recorder.add_data(asdict(image))
         self.cur_image_cnt += 1
 
-
-    def pixabay_crawl(self, keywords: str = "cat", image_cnt: int = 200) -> bool:
-        self.page_init(keywords=keywords,website="pixabay")
-        while self.cur_image_cnt<image_cnt:
+    def pixabay_crawl(self, keywords: str = "cat", image_cnt: int = 1000) -> bool:
+        self.page_init(keywords=keywords, website="pixabay")
+        while self.cur_image_cnt < image_cnt:
             self.page.scroll.down(800)
             sleep(0.2)
             self.page.scroll.up(200)
             sleep(0.2)
-            if len(figs:=self.page.eles('css:div[class^="column"] img')) > image_cnt:
+            if len(figs := self.page.eles('css:div[class^="column"] img')) > image_cnt:
                 for fig in figs:
                     pass
+
         def pixabay_image_extract(self, keywords, fig_ele):
-            image=Image()
-            image.key_words=keywords
+            image = Image()
+            image.key_words = keywords
             pass
+
+
 def read_first_column(filename):
     workbook = openpyxl.load_workbook(filename)
     sheet = workbook.active
-    column_data = [cell.value for cell in sheet['A'] if cell.value is not None]
+    column_data = [cell.value for cell in sheet["A"] if cell.value is not None]
     return column_data
+
 
 PROGRESS_FILE = "progress_cache.json"
 
+
 def save_progress(data):
-    with open(PROGRESS_FILE, 'w') as f:
+    with open(PROGRESS_FILE, "w") as f:
         json.dump(data, f)
+
 
 def load_progress():
     if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r') as f:
+        with open(PROGRESS_FILE, "r") as f:
             return json.load(f)
     return {}
+
 
 def cache_progress(func):
     def wrapper(*args, **kwargs):
         data = load_progress()
         list_to_process = args[0]
-        starting_index = data.get('last_completed', -1) + 1
+        starting_index = data.get("last_completed", -1) + 1
         for i in range(starting_index, len(list_to_process)):
             try:
                 func(list_to_process[i], **kwargs)
-                data['last_completed'] = i
+                data["last_completed"] = i
                 save_progress(data)
             except Exception as e:
                 print(f"Failed on index {i} due to {e}")
@@ -205,17 +211,32 @@ def cache_progress(func):
 
     return wrapper
 
-
-crawler = Image_crawler()
-@cache_progress # 将记录下当前列表中成功的参数；每次启动时读取成功参数
+@cache_progress  # 将记录下当前列表中成功的参数；每次启动时读取成功参数
 def unsplash_crawl_list(element):
     crawler.unsplash_crawl(keywords=element, image_cnt=1000)
 
+
+def count_avif_files_in_directory(directory):
+    """统计指定目录下.avif后缀的文件数量"""
+    return sum(1 for file in os.listdir(directory) if file.lower().endswith(".avif"))
+
+
+def images_counter():
+    root_directory = "images"
+    result = {}
+    for subdir, _, _ in os.walk(root_directory):
+        if subdir != root_directory:
+            result[subdir] = count_avif_files_in_directory(subdir)
+
+    # 输出统计结果到json文件
+    with open("result.json", "w") as json_file:
+        json.dump(result, json_file, indent=4, ensure_ascii=False)
+        print("[+] 已将图片统计结果输出到result.json中")
+
+crawler = Image_crawler()
+
 if __name__ == "__main__":
     os.chdir(os.path.dirname(__file__))
-    keywords_list=read_first_column('复愈性环境0917.xlsx')
+    images_counter()
+    keywords_list = read_first_column("复愈性环境0917.xlsx")
     unsplash_crawl_list(keywords_list)
-
-
-
-

@@ -6,17 +6,19 @@ from time import sleep
 from typing import Literal
 import json
 from DataRecorder import DBRecorder, Recorder
-from DrissionPage import WebPage
-from DrissionPage.chromium_element import ChromiumElement
-from DrissionPage.easy_set import configs_to_here, set_paths
-from DrissionPage.errors import ElementNotFoundError
 from loguru import logger
 import openpyxl
+<<<<<<< HEAD
 
 
 # Flickr
 # Pexels
 # Pinterest
+=======
+import playwright
+from playwright.sync_api import sync_playwright
+from pathlib import Path
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
 pexels_url = "https://www.pexels.com/search/{}"
 pexels_url_2 = "https://www.pexels.com/zh-cn/search/{}"
 
@@ -58,71 +60,117 @@ class Image_crawler:
         recoder: Literal["csv", "db"] = "csv",
         to_jpg: bool = False,
     ):
-        logger.remove()  # 删除默认的控制台处理器
-        logger.add(
-            sys.stderr,
-            level=console_log_level,
-        )
-        logger.add("mylog.log", rotation="5 MB", level=file_log_level)
-
-        if not os.path.exists("user_data"):  # 如果没有用户配置文件夹
+        user_data_dir=Path('user_data')
+        if not user_data_dir.exists() and not user_data_dir.isdir():  # 如果没有用户配置文件夹
             logger.info("[!] 没有发现配置。创建配置……")
-            configs_to_here()
-            set_paths(user_data_path="./user_data")
-        self.page = WebPage()
+            user_data_dir.mkdir()
+        self.brower_init()
+        self.recorder_init(recoder)  
+        self.website = website
+        self.to_jpg = to_jpg
+        if to_jpg:
+            logger.info("[+] 将会将avif格式的图片转换为jpg格式")
+
+    def recorder_init(self, recoder):
         if recoder == "csv":
             self.recorder = Recorder("imager_src_info.csv", cache_size=20)
             self.recorder._encoding = "utf-8-sig"
         else:
             self.recorder = DBRecorder(
                 "images.db", cache_size=10, table="images_src_info"
-            )  # noqa: E501
-        self.website = website
-        self.to_jpg = to_jpg
-        if to_jpg:
-            logger.info("[+] 将会将avif格式的图片转换为jpg格式")
+            )
+
+    def brower_init(self):
+        p = sync_playwright().start()
+        try:
+            browser = p.chromium.connect_over_cdp(endpoint_url="http://localhost:9222")
+            default_context = browser.contexts[0]
+            self.page = default_context.pages[0]
+            logger.info("[+] 使用已有的浏览器")
+        except playwright._impl._api_types.Error:
+            logger.info("[!] 未发现已有的浏览器，启动浏览器")
+            # 默认启动时，除非devtools是True，headless是True的
+            # 只要不手动运行browser.close()，浏览器就不会关闭
+            browser=p.chromium.launch_persistent_context(user_data_dir="./user_data",headless=False,devtools=True,args=["--remote-debugging-port=9222"])
+            self.page=browser.new_page()
 
     def mkdir(self, keyword):
         self.keyword = keyword
-        picpath = f"./images/{keyword}"
-        if not os.path.exists(picpath):
-            os.makedirs(picpath)
+        picpath = Path(f"./images/{keyword}")
+        picpath.mkdir(exist_ok=True)
 
+<<<<<<< HEAD
     def unsplash_crawl(self, keywords: str = "cat", image_cnt: int = 1000) -> bool:
         self.page_init(keywords, website="unsplash")
         if button := self.page("Load more", timeout=3):
             button.click(by_js=True, timeout=2.5)  # 先按load more
             sleep(2.5)
             self.page.scroll.to_top()
+=======
+    def unsplash_crawl(self, keywords: str = "cat", image_cnt: int = 200) -> bool:
+                def onresponse(res: Response):
+            ic(res.url)
+            if (
+                res.url.startswith("https://images.unsplash.com/photo-")
+                and "ixid" in res.url
+            ):
+                ic("!!!!!!!!!!!", res.url)
+                self.download(res, suffix="avif")
+
+
+        self.page_init(keywords,website="unsplash")
+        try:
+            self.page.click("text=Load more")
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
             logger.info("[√] 点击了load more按钮")
-        else:
+        except Exception as e:
             logger.warning("[!] Load more按钮没有点击，请自己手动点击一下！")
-        while self.cur_image_cnt < image_cnt:
-            self.page.scroll.down(800)
+            # button.click(by_js=True, timeout=2.5)  # 先按load more
+        self.page.evaluate("window.scrollTo(0, 0)") # 滚动到top位置
+        
+        last_processed_index=-1
+        fail_cnt=0
+        while self.cur_image_cnt < image_cnt and fail_cnt<10: 
+            #  and "Make something awesome" not in self.page.html
+            self.page.evaluate("window.scrollBy(0, 800)")
             sleep(0.15)
-            self.page.scroll.up(200)
+            self.page.evaluate("window.scrollBy(0, -200)")
             sleep(0.15)
             # figure[itemprop=image] 可获取所有的包括tag的图片信息元素组
             # img[data-test=photo-grid-masonry-img]可获取图片元素
-            if len(self.page.s_eles("css:figure[itemprop=image]")) > image_cnt:
-                for fig_ele in self.page.eles("css:figure[itemprop=image]"):
-                    self.unsplash_image_extract(keywords, fig_ele)
-                self.recorder.record()
+            image_eles=self.page.eles("css:figure[itemprop=image]")
+            if len(image_eles)==last_processed_index+1:
+                fail_cnt+=1
+                continue
+            for fig_ele in image_eles[last_processed_index:]: # 这里应该
+                self.unsplash_image_extract(keywords, fig_ele)
+            last_processed_index=len(image_eles)-1
+            self.recorder.record()
         return True
 
     def page_init(self, keywords, website="unsplash"):
         self.cur_image_cnt = 0
+<<<<<<< HEAD
         self.page.get(website_urls[website].format(keywords))  # 不同网站用不用的搜索网址
         # self.page.download_set.by_browser()
         self.page.download_set.by_DownloadKit()  # 是通过requests进行下载的
+=======
+        self.page.goto(website_urls[website].format(keywords)) # 不同网站用不用的搜索网址
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
         logger.info(f"[+] 开始搜索以{keywords}为关键词的图片")
 
     def unsplash_image_extract(self, keywords, fig_ele):
         image = Image()
         image.key_words = keywords
+<<<<<<< HEAD
         img_ele: ChromiumElement = fig_ele.ele(
             "css:img[data-test=photo-grid-masonry-img]"
         )
+=======
+        img_ele = fig_ele.ele(
+                        "css:img[data-test=photo-grid-masonry-img]"
+                    )
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
         image.title = img_ele.attr("alt")
         image.tag = fig_ele.child().child(index=2).raw_text.replace("\n", ";")
         filename = (
@@ -137,6 +185,7 @@ class Image_crawler:
         rename = os.path.basename(image.location)
         # image.link=img_ele.prop("currentSrc")#会返回一个plus.unsplash.com
         image.link = fig_ele("css:a[itemprop=contentUrl]").link
+<<<<<<< HEAD
         # save方法中Path(path).mkdir(parents=True, exist_ok=True)
         if not img_ele.prop("currentSrc"):
             logger.info(f"[x] 标题为{image.title}的图片将单独下载")
@@ -152,6 +201,9 @@ class Image_crawler:
         else:
             # save函数主要是通过currentSrc存储的
             img_ele.save(path=path, rename=rename)
+=======
+                    # save方法中Path(path).mkdir(parents=True, exist_ok=True)
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
         logger.debug(image)
         self.recorder.add_data(asdict(image))
         self.cur_image_cnt += 1
@@ -172,7 +224,10 @@ class Image_crawler:
             image.key_words = keywords
             pass
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
 def read_first_column(filename):
     workbook = openpyxl.load_workbook(filename)
     sheet = workbook.active
@@ -215,6 +270,7 @@ def cache_progress(func):
 def unsplash_crawl_list(element):
     crawler.unsplash_crawl(keywords=element, image_cnt=1000)
 
+<<<<<<< HEAD
 
 def count_avif_files_in_directory(directory):
     """统计指定目录下.avif后缀的文件数量"""
@@ -235,8 +291,26 @@ def images_counter():
 
 crawler = Image_crawler()
 
+=======
+logger.remove()  # 删除默认的控制台处理器
+logger.add(
+    sys.stderr,
+    level="DEBUG",
+)
+logger.add("mylog.log", rotation="5 MB", level="INFO")
+
+
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0
 if __name__ == "__main__":
     os.chdir(os.path.dirname(__file__))
     images_counter()
     keywords_list = read_first_column("复愈性环境0917.xlsx")
     unsplash_crawl_list(keywords_list)
+<<<<<<< HEAD
+=======
+
+
+
+
+
+>>>>>>> 615432ad4577dd12f284aa7632cad05c3ce9c4f0

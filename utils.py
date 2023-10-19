@@ -52,10 +52,11 @@ def rate_limit(max_per_minute=100):
 #         print("Executing some code...")
 
 
-def read_first_column(filename):
+def read_column(filename,column='A'):
     workbook = openpyxl.load_workbook(filename)
     sheet = workbook.active
-    column_data = [cell.value for cell in sheet["A"] if cell.value is not None]
+    column_data = [cell.value for cell in sheet[column] if cell.value is not None]
+    workbook.close()
     return column_data
 
 
@@ -93,8 +94,9 @@ def cache_progress(func):
             except KeyboardInterrupt:
                 data["last_completed"] = i
                 save_progress(data)
-                d.wait()
-                sys.exit(1)
+                # d.wait()
+                raise
+                # sys.exit(1)
 
     return wrapper
 
